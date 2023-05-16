@@ -173,7 +173,7 @@ def downloadChannels():
         print("Network Error!")
         clean_exit()
     except requests.exceptions.RequestException as e:
-        print("Unknown Error!")
+        print(f"Unknown Error! {e}")
         clean_exit()
 
     # Put channels in list
@@ -265,17 +265,17 @@ def channelGet(request, channel_name):
         if channel_name.capitalize() in channel['title'].capitalize():
             # Channel exists, now what?
             if request == "VERIFY":
-                return()
+                return
             elif request == "PLS":
-                return(channel['playlists'][quality_num]['url'])
+                return channel['playlists'][quality_num]['url']
             elif request == "NAME":
-                return(channel['title'])
+                return channel['title']
             elif request == "DESC":
-                return(channel['description'])
+                return channel['description']
             elif request == "ICON":
-                return(icon_dir + "/" + os.path.basename(channel[image_size]))
+                return icon_dir + "/" + os.path.basename(channel[image_size])
             elif request == "ICON_URL":
-                return(channel[image_size])
+                return channel[image_size]
             elif request == "URL":
                 # Download PLS
                 pls_file = requests.get(channel['playlists'][quality_num]['url'])
@@ -283,11 +283,11 @@ def channelGet(request, channel_name):
                 # Split out file URL
                 for line in pls_file.text.splitlines():
                     if "File1" in line:
-                        return(line.split('=')[1])
+                        return line.split('=')[1]
             elif request == "MP3":
                 for stream in channel['playlists']:
-                        if stream['format'] == 'mp3':
-                            return(stream['url'])
+                    if stream['format'] == 'mp3':
+                        return stream['url']
             else:
                 print(Fore.RED + "Unknown channel operation!")
                 clean_exit()
@@ -372,7 +372,7 @@ def startCast(channel_name):
         # If we get here, then player has stopped and so should Cast
         cast.quit_app()
     else:
-        print(Fore.RED + "--------------------------")
+        print(Fore.RED + "-" * 26)
         print(Fore.WHITE + "Now playing: " + Fore.CYAN + stream_name)
         clean_exit()
 
@@ -381,15 +381,15 @@ def stationID(track):
     # Loop through known IDs, return on match
     for station in station_ids:
         if station.capitalize() in track.capitalize():
-            return(True)
+            return True
 
     # If we get here, no match was found
-    return(False)
+    return False
 
 # Print stream and track information
 def streamInfo(playstream):
     InfoPrinted = False
-    print(Fore.RED + "--------------------------")
+    print(Fore.RED + "-" * 26)
     # Parse output
     for line in playstream.stdout:
         # Print debug information
@@ -403,7 +403,7 @@ def streamInfo(playstream):
                     print(Fore.CYAN + "Player: " + Fore.WHITE + "mpv")
                 # mpv doesn't give us much info, so have to pull channel name from args
                 print(Fore.CYAN + "Channel: " + Fore.WHITE + channelGet('NAME', args.channel))
-                print(Fore.RED + "--------------------------")
+                print(Fore.RED + "-" * 26)
                 print(Fore.WHITE + "Press Crtl+C to Quit")
                 InfoPrinted = True
 
@@ -414,7 +414,7 @@ def streamInfo(playstream):
                 print(Fore.CYAN + "Channel: " + Fore.WHITE + line.decode().split(':', 2)[1].strip())
             if line.startswith(b'MPEG'):
                 print(Fore.CYAN + "Bitrate: " + Fore.WHITE + line.decode().strip())
-                print(Fore.RED + "--------------------------")
+                print(Fore.RED + "-" * 26)
                 InfoPrinted = True
 
             # Mplayer
@@ -426,7 +426,7 @@ def streamInfo(playstream):
                 print(Fore.CYAN + "Genre: " + Fore.WHITE + line.decode().split(':', 1)[1].strip())
             if line.startswith(b'Bitrate'):
                 print(Fore.CYAN + "Bitrate: " + Fore.WHITE + line.decode().split(':', 1)[1].strip())
-                print(Fore.RED + "--------------------------")
+                print(Fore.RED + "-" * 26)
                 InfoPrinted = True
 
         # Updates on every new track
@@ -477,7 +477,7 @@ parser.add_argument('-l', '--list', action='store_true', help='Download and disp
 parser.add_argument('-s', '--stats', action='store_true', help='Display current listener stats')
 parser.add_argument('-a', '--about', action='store_true', help='Show information about SomaFM')
 parser.add_argument('-c', '--cast', nargs='?', default=False, help='Start playback on Chromecast')
-parser.add_argument('-f', '--file', action='store_true', help='Enable experimental track logging for this session')
+parser.add_argument('-f', '--file', action='store_true', help=f'Enable experimental track logging for this session to {track_file}')
 parser.add_argument('-n', '--notify', action='store_true', help='Enable experimental desktop notifications for this session')
 parser.add_argument('-p', '--player', action='store_true', help='Show which player is being used for this session')
 parser.add_argument('-v', '--verbose', action='store_true', help='For debug use, prints all output of media player.')
