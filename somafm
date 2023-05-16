@@ -20,6 +20,9 @@ from random import randrange
 from datetime import datetime
 from colorama import Fore, Style
 from collections import OrderedDict
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Optional Chromecast support, don't error if can't import
 try:
@@ -65,7 +68,10 @@ notification_cmd = ""
 log_tracks = False
 
 # File to store track listing
-track_file = "/tmp/somafm_tracks.txt"
+track_file = "/tmp/somafm_tracks.json"
+
+# Wether to deduplicate the track log
+deduplicate_log = True
 
 # Following variables should probably be left alone
 #-----------------------------------------------------------------------
@@ -129,7 +135,7 @@ def configPlayer():
                     'sarg1': '-ao',
                     'sarg2': 'null',
                     'stream': 'PLS'
-                    }
+                }
                 break
             elif player_name == 'mpg123':
                 player = {
@@ -138,14 +144,14 @@ def configPlayer():
                     'sarg1': '-a',
                     'sarg2': 'null',
                     'stream': 'MP3'
-                    }
+                }
                 break
             elif player_name == 'mpv':
                 player = {
                     'name': 'mpv',
                     'arg': '',
                     'stream': 'PLS'
-                    }
+                }
                 break
 
     # If dict hasn't been populated, then no player was found
@@ -304,6 +310,7 @@ def startStream(channel_name):
 
     # Open stream
     print("Loading stream...", end='')
+    # TODO: probably should use check_call and a more specific except
     try:
         playstream = subprocess.Popen([player['name'], player['arg'], stream_link],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
@@ -330,6 +337,7 @@ def startCast(channel_name):
         chromecasts = pychromecast.get_chromecasts()
         cast = next(cc for cc in chromecasts if cc.device.friendly_name == chromecast_name)
     except:
+        # TODO: probably should use a more specific except
         print(Fore.RED + "FAILED")
         print("")
         print(Fore.WHITE + "Double check the device name and try again.")
@@ -342,6 +350,7 @@ def startCast(channel_name):
         stream.play_media(stream_url, 'audio/mp3', stream_name, channelGet('ICON_URL', channel_name))
         stream.block_until_active()
     except:
+        # TODO: probably should use a more specific except
         print(Fore.RED + "FAILED")
         print("")
         print(Fore.WHITE + "Stream failed to start on Chromecast.")
@@ -363,6 +372,7 @@ def startCast(channel_name):
             playstream = subprocess.Popen([player['name'], player['sarg1'], player['sarg2'], stream_url],
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
         except:
+            # TODO: probably should use a more specific except
             print(Fore.RED + "Track Sync Failed!")
             clean_exit()
 
@@ -392,6 +402,7 @@ def streamInfo(playstream):
     print(Fore.RED + "-" * 26)
     # Parse output
     for line in playstream.stdout:
+        # logger.debug(line)
         # Print debug information
         if args.verbose:
             print(line)
@@ -419,13 +430,16 @@ def streamInfo(playstream):
 
             # Mplayer
             if line.startswith(b'Name'):
+                channel_name = line.decode().split(':', 2)[1].strip()
                 if show_player:
                     print(Fore.CYAN + "Player: " + Fore.WHITE + "MPlayer")
-                print(Fore.CYAN + "Channel: " + Fore.WHITE + line.decode().split(':', 2)[1].strip())
+                print(Fore.CYAN + "Channel: " + Fore.WHITE + channel_name)
             if line.startswith(b'Genre'):
-                print(Fore.CYAN + "Genre: " + Fore.WHITE + line.decode().split(':', 1)[1].strip())
+                channel_genre = line.decode().split(':', 1)[1].strip()
+                print(Fore.CYAN + "Genre: " + Fore.WHITE + channel_genre)
             if line.startswith(b'Bitrate'):
-                print(Fore.CYAN + "Bitrate: " + Fore.WHITE + line.decode().split(':', 1)[1].strip())
+                channel_bitrate = line.decode().split(':', 1)[1].strip()
+                print(Fore.CYAN + "Bitrate: " + Fore.WHITE + channel_bitrate)
                 print(Fore.RED + "-" * 26)
                 InfoPrinted = True
 
@@ -440,8 +454,9 @@ def streamInfo(playstream):
                 match = re.search(r"StreamTitle='(.*)';StreamUrl=", info)
                 track = match.group(1)
 
+            listening_date = datetime.now().strftime("%H:%M:%S")
             # Print date before track
-            print(Fore.BLUE + datetime.now().strftime("%H:%M:%S"), end=' | ')
+            print(Fore.BLUE + listening_date, end=' | ')
 
             # Check if track is a station ID once, save value to variable
             IDStatus = stationID(track)
@@ -456,7 +471,11 @@ def streamInfo(playstream):
             if not IDStatus:
                 # Log track to file if enabled
                 if log_tracks:
-                    track_log.write(track + "\n")
+                    # track_log.write(track + "\n")
+                    try:
+                        track_log[channel_name].append(track)
+                    except KeyError:
+                        track_log[channel_name] = [track]
 
                 # Send desktop notification if enabled
                 if desktop_notifications:
@@ -477,7 +496,7 @@ parser.add_argument('-l', '--list', action='store_true', help='Download and disp
 parser.add_argument('-s', '--stats', action='store_true', help='Display current listener stats')
 parser.add_argument('-a', '--about', action='store_true', help='Show information about SomaFM')
 parser.add_argument('-c', '--cast', nargs='?', default=False, help='Start playback on Chromecast')
-parser.add_argument('-f', '--file', action='store_true', help=f'Enable experimental track logging for this session to {track_file}')
+parser.add_argument('-f', '--file', action='store_true', help=f'Enable experimental track logging to {track_file}')
 parser.add_argument('-n', '--notify', action='store_true', help='Enable experimental desktop notifications for this session')
 parser.add_argument('-p', '--player', action='store_true', help='Show which player is being used for this session')
 parser.add_argument('-v', '--verbose', action='store_true', help='For debug use, prints all output of media player.')
@@ -519,8 +538,10 @@ if args.notify:
 if args.delete:
     try:
         shutil.rmtree(cache_dir)
-    except:
+    except OSError as e:
+        # TODO: probably should use a more specific except
         print("Error while clearing cache!")
+        print(e)
         clean_exit()
 
     # If we get here, sucess
@@ -591,21 +612,30 @@ if args.stats:
 configPlayer()
 
 # See if we already have a channel list
-if os.path.isfile(channel_file) == False:
+if not os.path.isfile(channel_file):
     downloadChannels()
 
 # Load local channel list
-with open (channel_file, 'rb') as fp:
-    channel_list = pickle.load(fp)
+with open(channel_file, 'rb') as fh:
+    channel_list = pickle.load(fh)
 
+import json
 # Open file for track logging (enable line buffering)
 if log_tracks:
-    track_log = open(track_file, 'a', 1)
+    if not os.path.isfile(track_file):
+        track_log = {}
+    else:
+        try:
+            with open(track_file, 'r') as fh:
+                track_log = json.load(fh)
+        except OSError as e:
+            logger.error(e)
+            track_log = {}
 
 # Sanity check for desktop notifications
 if desktop_notifications:
     # See if we have notify-send
-    if shutil.which("notify-send") == None:
+    if shutil.which("notify-send") is None:
         # If we don't, turn off notifications and warn user
         desktop_notifications = False
         print(Fore.RED + "Desktop notifications not supported on this system!" + Fore.WHITE)
@@ -635,7 +665,12 @@ minutes, seconds = divmod(remainder, 60)
 
 # Close log file
 if log_tracks:
-    track_log.close()
+    with open(track_file, "w") as fh:
+        if deduplicate_log:
+            for key, value in track_log.items():
+                track_log[key] = list(set(value))
+        json.dump(track_log, fh)
+    # track_log.close()
 
 # Print exit message
 print(Fore.RESET + "Playback stopped after {:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds)))
