@@ -77,7 +77,7 @@ track_file = "/tmp/somafm_tracks.json"
 deduplicate_log = True
 
 # Specify a cutoff for guessing "close" matches for channel names
-difflib_cutoff = 0.6
+difflib_cutoff = 0.5
 
 
 # Following variables should probably be left alone
@@ -321,7 +321,10 @@ def channelGet(request, channel_name):
     
     channel_matches = difflib.get_close_matches(channel_name, [channel["title"] for channel in channel_list], n=1, cutoff=difflib_cutoff)
     if channel_matches:
+        print("Difflib matched")
         return channelGet(request, channel_matches[0])
+    else:
+        print("Difflib didn't match")
 
     # If we get here, no match
     print(Fore.RED + "Channel not found!")
