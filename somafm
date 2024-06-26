@@ -22,6 +22,7 @@ from colorama import Fore, Style
 from collections import OrderedDict
 import logging
 import difflib
+from pathlib import Path
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -109,6 +110,14 @@ station_ids = ["SomaFM", "Big Url"]
 
 # Supported players
 players = ["mplayer", "mpg123", "mpv"]
+
+# -----------------------------------------------------------------------#
+import atexit
+
+def exit_handler():
+    Path(pid_file).unlink(missing_ok=True)
+
+atexit.register(exit_handler)
 
 
 # Define functions
@@ -242,7 +251,7 @@ def downloadIcons():
 # Loop through channels and print their descriptions
 def listChannels():
     # Find longest channel name
-    channel_length = max(len(channel["title"]) for channel in channel_list)
+    channel_length = max(len(channel["id"]) for channel in channel_list)
 
     # Loop through channels
     print(Fore.RED + "------------------------------")
@@ -250,7 +259,7 @@ def listChannels():
         # Adjust spacing to fit longest channel name
         print(
             Fore.BLUE
-            + "{cname:>{cwidth}}".format(cwidth=channel_length, cname=channel["title"])
+            + "{cname:>{cwidth}}".format(cwidth=channel_length, cname=channel["id"])
             + Fore.WHITE,
             end=" : ",
         )
@@ -286,56 +295,55 @@ def showStats():
 
 
 # Return information for given channel
-def channelGet(request, channel_name):
-    for channel in channel_list:
-        if channel_name.capitalize() in channel["title"].capitalize():
-            # Channel exists, now what?
-            if request == "VERIFY":
-                return
-            elif request == "PLS":
-                return channel["playlists"][quality_num]["url"]
-            elif request == "NAME":
-                return channel["title"]
-            elif request == "DESC":
-                return channel["description"]
-            elif request == "ICON":
-                return icon_dir + "/" + os.path.basename(channel[image_size])
-            elif request == "ICON_URL":
-                return channel[image_size]
-            elif request == "URL":
-                # Download PLS
-                pls_file = requests.get(channel["playlists"][quality_num]["url"])
+def channelGet(request, channel_id):
 
-                # Split out file URL
-                for line in pls_file.text.splitlines():
-                    if "File1" in line:
-                        return line.split("=")[1]
-            elif request == "MP3":
-                for stream in channel["playlists"]:
-                    if stream["format"] == "mp3":
-                        return stream["url"]
-            else:
-                print(Fore.RED + "Unknown channel operation!")
-                clean_exit()
-
-    
-    channel_matches = difflib.get_close_matches(channel_name, [channel["title"] for channel in channel_list], n=1, cutoff=difflib_cutoff)
+    #channel_matches = difflib.get_close_matches(channel_id, [channel["title"] for channel in channel_list], n=1, cutoff=difflib_cutoff)
+    channel_matches = difflib.get_close_matches(channel_id, [channel["id"] for channel in channel_list], n=1, cutoff=difflib_cutoff)
     if channel_matches:
-        print("Difflib matched")
-        return channelGet(request, channel_matches[0])
+        print(f"Difflib matched: {channel_matches[0]}")
+        found_channel = channel_matches[0]
+
+    if not found_channel:
+        # If we get here, no match
+        print(Fore.RED + "Channel not found!")
+        print(Fore.WHITE + "Double check the id of the channel and try again.")
+        clean_exit()
     else:
-        print("Difflib didn't match")
+        channel = [channel for channel in channel_list if found_channel == channel["id"]][0]
 
-    # If we get here, no match
-    print(Fore.RED + "Channel not found!")
-    print(Fore.WHITE + "Double check the name of the channel and try again.")
-    clean_exit()
+    # Channel exists, now what?
+    if request == "VERIFY":
+        return
+    elif request == "PLS":
+        return channel["playlists"][quality_num]["url"]
+    elif request == "NAME":
+        return channel["title"]
+    elif request == "DESC":
+        return channel["description"]
+    elif request == "ICON":
+        return icon_dir + "/" + os.path.basename(channel[image_size])
+    elif request == "ICON_URL":
+        return channel[image_size]
+    elif request == "URL":
+        # Download PLS
+        pls_file = requests.get(channel["playlists"][quality_num]["url"])
 
+        # Split out file URL
+        for line in pls_file.text.splitlines():
+            if "File1" in line:
+                return line.split("=")[1]
+    elif request == "MP3":
+        for stream in channel["playlists"]:
+            if stream["format"] == "mp3":
+                return stream["url"]
+    else:
+        print(Fore.RED + "Unknown channel operation!")
+        clean_exit()
 
 # Stream channel with media player
-def startStream(channel_name):
+def startStream(channel_id):
     # Verify stream exists before starting stream
-    stream_link = channelGet(player["stream"], args.channel)
+    stream_link = channelGet(player["stream"], channel_id)
 
     # Open stream
     print("Loading stream...", end="")
@@ -359,10 +367,10 @@ def startStream(channel_name):
 
 
 # Stream channel on Chromecast
-def startCast(channel_name):
+def startCast(channel_id):
     # Populate stream variables
-    stream_name = channelGet("NAME", channel_name)
-    stream_url = channelGet("URL", channel_name)
+    stream_name = channelGet("ID", channel_id)
+    stream_url = channelGet("URL", channel_id)
 
     # Now try to communicate with CC
     print("Connecting to", chromecast_name, end="...")
@@ -384,7 +392,7 @@ def startCast(channel_name):
         cast.wait()
         stream = cast.media_controller
         stream.play_media(
-            stream_url, "audio/mp3", stream_name, channelGet("ICON_URL", channel_name)
+            stream_url, "audio/mp3", stream_name, channelGet("ICON_URL", channel_id)
         )
         stream.block_until_active()
     except:
@@ -400,7 +408,7 @@ def startCast(channel_name):
         # Some player specific tweaks
         if player["name"] == "mpg123":
             # mpg123 needs @ added to stream name
-            stream_url = "-@" + channelGet("MP3", args.channel)
+            stream_url = "-@" + channelGet("MP3", channel_id)
         elif player["name"] == "mpv":
             # Playing without audio doesn't seem to work in mpv, so bail out for now
             print(Fore.RED + "Cast sync not supported on mpv.")
@@ -567,9 +575,6 @@ parser.add_argument(
     "-s", "--stats", action="store_true", help="Display current listener stats"
 )
 parser.add_argument(
-    "-a", "--about", action="store_true", help="Show information about SomaFM"
-)
-parser.add_argument(
     "-c", "--cast", nargs="?", default=False, help="Start playback on Chromecast"
 )
 parser.add_argument(
@@ -657,77 +662,6 @@ if platform.system() == "Windows":
 else:
     os.system("clear")
 print(Style.BRIGHT, end="")
-
-if args.about:
-    # I can't decide which one I like best, so let's use them all!
-    randlogo = randrange(3)
-    if randlogo == 0:
-        print(
-            Fore.BLUE + "   _____                  " + Fore.GREEN + "     ________  ___"
-        )
-        print(
-            Fore.BLUE + "  / ___/____  ____ ___  ____ _" + Fore.GREEN + "/ ____/  |/  /"
-        )
-        print(
-            Fore.BLUE + "  \__ \/ __ \/ __ `__ \/ __ `" + Fore.GREEN + "/ /_  / /|_/ / "
-        )
-        print(
-            Fore.BLUE + " ___/ / /_/ / / / / / / /_/ " + Fore.GREEN + "/ __/ / /  / /  "
-        )
-        print(
-            Fore.BLUE + "/____/\____/_/ /_/ /_/\__,_" + Fore.GREEN + "/_/   /_/  /_/   "
-        )
-    elif randlogo == 1:
-        print(Fore.BLUE + " __" + Fore.GREEN + "                         ___")
-        print(Fore.BLUE + "/ _\ ___  _ __ ___   __ _  " + Fore.GREEN + "/ __\/\/\   ")
-        print(Fore.BLUE + "\ \ / _ \| '_ ` _ \ / _` |" + Fore.GREEN + "/ _\ /    \  ")
-        print(Fore.BLUE + "_\ \ (_) | | | | | | (_| " + Fore.GREEN + "/ /  / /\/\ \ ")
-        print(Fore.BLUE + "\__/\___/|_| |_| |_|\__,_" + Fore.GREEN + "\/   \/    \/ ")
-    elif randlogo == 2:
-        print(
-            Fore.BLUE
-            + " ______     ______     __    __     ______  "
-            + Fore.GREEN
-            + "   ______   __    __    "
-        )
-        print(
-            Fore.BLUE
-            + "/\  ___\   /\  __ \   /\ '-./  \   /\  __ \ "
-            + Fore.GREEN
-            + "  /\  ___\ /\ '-./  \   "
-        )
-        print(
-            Fore.BLUE
-            + "\ \___  \  \ \ \/\ \  \ \ \-./\ \  \ \  __ \ "
-            + Fore.GREEN
-            + " \ \  __\ \ \ \-./\ \  "
-        )
-        print(
-            Fore.BLUE
-            + " \/\_____\  \ \_____\  \ \_\ \ \_\  \ \_\ \_\ "
-            + Fore.GREEN
-            + " \ \_\    \ \_\ \ \_\ "
-        )
-        print(
-            Fore.BLUE
-            + "  \/_____/   \/_____/   \/_/  \/_/   \/_/\/_/ "
-            + Fore.GREEN
-            + "  \/_/     \/_/  \/_/ "
-        )
-
-    print(Fore.WHITE + "")
-    print("SomaFM is a listener-supported Internet-only radio station.")
-    print("")
-    print("That means no advertising or annoying commercial interruptions. SomaFM's")
-    print("mission is to search for and expose great new music which people may")
-    print("otherwise never encounter.")
-    print("")
-    print("If you like what you hear on SomaFM and want to help, please consider")
-    print("visiting their site and making a donation.")
-    print("")
-    print(Fore.BLUE + "https://somafm.com/support/")
-    print("")
-    clean_exit()
 
 # Create cache directory if doesn't exist
 if not os.path.exists(cache_dir):
