@@ -9,8 +9,11 @@ Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
 Requires-Python: >=3.5
 Description-Content-Type: text/markdown
-Provides-Extra: Chromecast Support
 License-File: COPYING
+Requires-Dist: requests
+Requires-Dist: colorama
+Provides-Extra: chromecast-support
+Requires-Dist: pychromecast; extra == "chromecast-support"
 
 This simple player for [SomaFM](https://somafm.com/) keeps the distractions, and system resource utilization, to an absolute minimum. The look of this player was inspired equally by the excellent SomaFM terminal interfaces which were already available, and the 90's hacker aesthetic that I seem to find myself nostalgic for when listening to a Shoutcast stream at 2AM.
 

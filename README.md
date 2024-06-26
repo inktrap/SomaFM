@@ -1,4 +1,16 @@
 ![feat_img](screenshots/playing.png)
+
+# Changes/Differences
+
+This fork
+
+- can log played tracks
+- matches channel-ids ("defcon") rather than titles ("DEF CON Radio") because they are easier to remember/type
+- also does some kind of fuzzy matching via difflib
+- has now `--about` section for now, because the logos had invalid escape sequences in them
+
+It would be cool to rewrite this to be more modular, to use modern libraries like `rich` and `typer` aso, but this works for now.
+
 # Python SomaFM Player
 This simple player for [SomaFM](https://somafm.com/) keeps the distractions, and system resource utilization, to an absolute minimum. The look of this player was inspired equally by the excellent SomaFM terminal interfaces which were already available, and the 90's hacker aesthetic that I seem to find myself nostalgic for when listening to a Shoutcast stream at 2AM.
 
