@@ -300,7 +300,7 @@ def channelGet(request, channel_id):
     #channel_matches = difflib.get_close_matches(channel_id, [channel["title"] for channel in channel_list], n=1, cutoff=difflib_cutoff)
     channel_matches = difflib.get_close_matches(channel_id, [channel["id"] for channel in channel_list], n=1, cutoff=difflib_cutoff)
     if channel_matches:
-        print(f"Difflib matched: {channel_matches[0]}")
+        # print(f"Difflib matched: {channel_matches[0]}")
         found_channel = channel_matches[0]
 
     if not found_channel:
